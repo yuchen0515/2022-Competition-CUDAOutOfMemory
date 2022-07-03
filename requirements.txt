@@ -1,0 +1,14 @@
+flask==1.1.2
+numpy==1.22.2
+gunicorn==20.1.0
+ckiptagger==0.2.1
+tensorflow==2.8.0
+transformers==4.5.0
+torch==1.11.0+cu113
+argparse==1.4.0
+pandas==1.4.1
+einops==0.4.1
+service_streamer==0.1.2
+nltk==3.7
+tqdm==4.62.3
+evaluate==0.1.1

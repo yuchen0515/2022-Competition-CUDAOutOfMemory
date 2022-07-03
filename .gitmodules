@@ -1,0 +1,3 @@
+[submodule "nlp_fluency"]
+	path = nlp_fluency
+	url = https://github.com/baojunshan/nlp-fluency.git

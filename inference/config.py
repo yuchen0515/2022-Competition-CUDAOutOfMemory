@@ -16,5 +16,6 @@ class Config:
     max_norm = 1.0
     
     model_dir = 'test_model_1'
+    nlp_fluency_lm_path = '../ngram_lm/trigram'
     
 ################################################

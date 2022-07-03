@@ -8,6 +8,10 @@ from tqdm import tqdm
 from ckiptagger import WS, data_utils
 import json
 
+import sys
+sys.path.insert(1, '../nlp_fluency')
+from models import NgramsLanguageModel
+
 #from nlp_fluency.models import NgramsLanguageModel
 
 #torch
@@ -21,15 +25,19 @@ from torch.nn.modules import transformer
 from transformers import BertModel, BertTokenizerFast
 from evaluate import load
 
+
 from model import *
 from data import *
 from evaluation import *
 
 from config import Config
+if not os.path.exists(Config.model_dir):
+    os.mkdir(Config.model_dir)
 
 def train(model, tokenizer, device, criterion, optimizer,
           train_dataloader, dev_data,
           ws, uni_gram_dict, bi_gram_dict, tri_gram_dict,
+          nlp_fluency_lm,
           model_dir,
           epoch=5, max_norm=1.0):
     
@@ -82,7 +90,8 @@ def train(model, tokenizer, device, criterion, optimizer,
         
 
         curr_cer = evaluation(model, tokenizer, device, dev_data, 
-                             ws, uni_gram_dict, bi_gram_dict,tri_gram_dict)
+                             ws, uni_gram_dict, bi_gram_dict,tri_gram_dict,
+                             nlp_fluency_lm)
         if curr_cer < best_cer:
             best_cer = curr_cer
             best_model_path = curr_model_path
@@ -100,6 +109,8 @@ with open(Config.ngram_dict_dir + '/' +'bigram.json') as d:
     bi_gram_dict = json.load(d)
 with open(Config.ngram_dict_dir + '/' +'trigram.json') as d:
     tri_gram_dict = json.load(d)
+
+nlp_fluency_lm = NgramsLanguageModel.from_pretrained(Config.nlp_fluency_lm_path)
     
 if not os.path.exists("../data"):
     data_utils.download_data_url("../")
@@ -107,16 +118,18 @@ ws = WS('../data')
 
 #lm = NgramsLanguageModel.from_pretrained("./ngram_dicts/trigram_lm_with_external_corpus")
 
+
+
 train_data, dev_data = data_handler(data_path=f'../data_preprocess/preprocessed_train_all.csv',
-                                     output_path_list=[f'./{Config.model_dir}/train_data.csv',
-                                                       f'./{Config.model_dir}/dev_data.csv'],
+                                     output_path_list=[f'{Config.model_dir}/train_data.csv',
+                                                       f'{Config.model_dir}/dev_data.csv'],
                                      sample_or_split='split', 
-                                     sample_or_train_ratio=0.8,
+                                     sample_or_train_ratio=0.01,
                                      max_len=200)
 
 
 
-curr_dir = f'./{Config.model_dir}'
+curr_dir = f'{Config.model_dir}'
 if not os.path.exists(curr_dir):
     os.mkdir(curr_dir)
 
@@ -146,5 +159,6 @@ train_dataloader = DataLoader(train_dataset,
 best_model_path = train(model, tokenizer, Config.device, criterion, optimizer,
                         train_dataloader, dev_data,
                         ws, uni_gram_dict, bi_gram_dict, tri_gram_dict,
+                        nlp_fluency_lm,
                         curr_dir,
                         epoch=6, max_norm=Config.max_norm)

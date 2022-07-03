@@ -13,6 +13,11 @@ from einops import rearrange
 from config import Config
 from perplexity import *
 
+import sys
+sys.path.insert(1, '../nlp_fluency')
+from models import NgramsLanguageModel
+
+
 def generate_mask(length):
     mask = rearrange(torch.triu(torch.ones(length, length)) == 1, 'h w -> w h')
     mask = mask.float().masked_fill(mask == 0, float('-inf'))
@@ -73,10 +78,18 @@ def penalty_func(src_len, trg_len, first_penalty=0.25, second_penalty=1):
 
 def get_scores(sentence_list, phoneme_length_list, 
                ws, uni_gram_dict, bi_gram_dict, tri_gram_dict,
+               nlp_fluency_lm,
                length_penalty=True,
                first_penalty=0.25, second_penalty=1):
-
-    perplexity_list = trigram_perplexity(sentence_list, ws, uni_gram_dict, bi_gram_dict, tri_gram_dict)
+    
+    if nlp_fluency_lm is not None:
+        segmented_sentence_list = ws(sentence_list)
+        perplexity_list = []        
+        for sentence in segmented_sentence_list:
+            perplexity = math.log(nlp_fluency_lm.perplexity(sentence))
+            perplexity_list.append(perplexity)
+    else:
+        perplexity_list = trigram_perplexity(sentence_list, ws, uni_gram_dict, bi_gram_dict, tri_gram_dict)
             
     score_list = []
     for sentence, perplexity, phoneme_length in zip(sentence_list, perplexity_list, phoneme_length_list):
@@ -93,6 +106,7 @@ def get_scores(sentence_list, phoneme_length_list,
 def evaluation(model_or_model_path, tokenizer, device, 
                dev_data,
                ws, uni_gram_dict, bi_gram_dict, tri_gram_dict, 
+               nlp_fluency_lm,
                length_penalty=True,
                first_penalty=0.25, 
                second_penalty=1,
@@ -136,9 +150,11 @@ def evaluation(model_or_model_path, tokenizer, device,
 
 
                 corrected_scores = get_scores(corrected_sentence_list, phoneme_length_list, 
-                                              ws, uni_gram_dict, bi_gram_dict, tri_gram_dict)                    
+                                              ws, uni_gram_dict, bi_gram_dict, tri_gram_dict,
+                                              nlp_fluency_lm)                    
                 raw_scores = get_scores(sentence_list, phoneme_length_list,
                                         ws, uni_gram_dict, bi_gram_dict, tri_gram_dict,
+                                        nlp_fluency_lm,
                                         length_penalty)
 
                 all_sentence_list = sentence_list + corrected_sentence_list

@@ -18,6 +18,10 @@ from tqdm import tqdm
 from transformers import BertTokenizerFast
 from ckiptagger import data_utils, WS
 
+import sys
+sys.path.insert(1, '../nlp_fluency')
+from models import NgramsLanguageModel
+
 
 
 
@@ -177,4 +181,8 @@ with open('../ngram_lm/trigram.json', 'w') as fp:
     
 print('Done')
 
-del ws
+#Build NLP Fluency N-Gram LM
+ngram_lm = NgramsLanguageModel(ngram=3, sentence_length=200)
+ngram_lm.train(ground_truth)
+    
+ngram_lm.save("../ngram_lm/trigram")
