@@ -14,6 +14,10 @@ from transformers import BertModel, BertTokenizerFast
 
 from ckiptagger import WS, data_utils
 
+import sys
+sys.path.insert(1, '../nlp_fluency')
+from models import NgramsLanguageModel
+
 from dataset_inference import *
 from config import Config
 from word_converter import *
@@ -21,37 +25,41 @@ from model import *
 from perplexity import *
 from search_method import *
 
+class Inference:
+    def __init__(self, model, tokenizer, device, Config):
+        self.model = model
+        self.tokenizer = tokenizer
+        self.device = device
+        self.Config = Config
 
-
-def inference(model, tokenizer, device, sentence_list, Config):
-    '''
-        inference input sentences to corrected sentences
+    def inference(self, input_sentences):
+        '''
+            inference input sentences to corrected sentences
+            
+            params:
+                param1 model: Trained Transformer model
+                param2 tokenizer: a BERT tokenizer for sentence tokenize
+                param3 device: a string which determines the graphic card model/tensor will be used
+                param4 sentence_list: a list of string for sentence inference
+                param5 Config: a Config class for model setting
+            
+            return:
+                predicted_sentences: a list of string corrected by model
+        '''
+        self.model.to(self.device)
+        self.model.eval()
         
-        params:
-            param1 model: Trained Transformer model
-            param2 tokenizer: a BERT tokenizer for sentence tokenize
-            param3 device: a string which determines the graphic card model/tensor will be used
-            param4 sentence_list: a list of string for sentence inference
-            param5 Config: a Config class for model setting
-        
-        return:
-            predicted_sentences: a list of string corrected by model
-    '''
-    model.to(device)
-    model.eval()
-    
-    sentence_list = word_converter(sentence_list)
+        input_sentences = word_converter(input_sentences)
 
-    inference_dataset = GecDatasetInference(sentence_list, tokenizer, Config)
-    inference_dataloader = DataLoader(dataset=inference_dataset, batch_size=inference_dataset.len, collate_fn=collate_fn_inference)
-    
-    corrected_sentence_list = []
-    for batch in inference_dataloader:
-        corrected_sentence_list = greedy_search(model, tokenizer, device, 
-                                                batch, inference_dataloader.batch_size)
-              
-    
-    return sentence_list, corrected_sentence_list
+        inference_dataset = GecDatasetInference(input_sentences, self.tokenizer, self.Config)
+        inference_dataloader = DataLoader(dataset=inference_dataset, batch_size=inference_dataset.len, collate_fn=collate_fn_inference)
+        
+        corrected_sentence_list = []
+        for batch in inference_dataloader:
+            corrected_sentence_list = greedy_search(self.model, self.tokenizer, self.device, batch, inference_dataloader.batch_size)
+                  
+        
+        return sentence_list, corrected_sentence_list
 
 
 
@@ -64,6 +72,7 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda:0', help='Graphic card(or cpu) which used in model inference')
     parser.add_argument('--ws_path', type=str, default='../data', help='pre-trained(?) model of ckip word segment model')
     parser.add_argument('--ngram_dict_dir', type=str, default=None, help='directory of ngrams dictionary')
+    parser.add_argument('--nlp_fluency_dir', type=str, default='', help='Use NLP Fluency or not')
     
     args = parser.parse_args()
     
@@ -76,6 +85,7 @@ if __name__ == '__main__':
     
     ws_path = args.ws_path
     ngram_dict_dir = args.ngram_dict_dir
+    nlp_fluency_dir = args.nlp_fluency_dir
     
     model = torch.load(model_path, map_location=device)
     tokenizer = BertTokenizerFast.from_pretrained(tokenizer_path)
@@ -86,6 +96,14 @@ if __name__ == '__main__':
         bi_gram_dict = json.load(dict)
     with open(ngram_dict_dir + '/' +'trigram.json') as dict:
         tri_gram_dict = json.load(dict)
+    
+    if nlp_fluency_dir != '':
+        print('Use NLP Fluency')
+        use_nlp_fluency = True
+        nlp_fluency_lm = NgramsLanguageModel.from_pretrained(nlp_fluency_dir)
+    else:
+        use_nlp_fluency = False
+    
     
     if not os.path.exists(ws_path):
         print("ckiptagger model not exists, Downloading...")
@@ -103,11 +121,17 @@ if __name__ == '__main__':
             data = json.load(f)
             sentence_list = data['sentence_list']
     
+    inference = Inference(model, tokenizer, device, Config)
 
-    sentence_list, corrected_sentence_list = inference(model, tokenizer, device, sentence_list, Config)
+    sentence_list, corrected_sentence_list = inference.inference(sentence_list)
     
-    corrected_perpelxity_list = trigram_perplexity(corrected_sentence_list, 
-                                                   ws, uni_gram_dict, bi_gram_dict, tri_gram_dict)
+    if use_nlp_fluency == True:
+        corrected_perpelxity_list = []
+        for corrected_sentence in corrected_sentence_list:
+            corrected_perpelxity_list.append(nlp_fluency_lm.perplexity(ws([corrected_sentence])[0]))
+    else:
+        corrected_perpelxity_list = trigram_perplexity(corrected_sentence_list, 
+                                                       ws, uni_gram_dict, bi_gram_dict, tri_gram_dict)
     
     ranking = np.argsort(corrected_perpelxity_list)
     best_sentence = corrected_sentence_list[ranking[0]]
