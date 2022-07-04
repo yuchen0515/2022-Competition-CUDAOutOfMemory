@@ -8,11 +8,7 @@ from tqdm import tqdm
 from ckiptagger import WS, data_utils
 import json
 
-import sys
-sys.path.insert(1, '../nlp_fluency')
-from models import NgramsLanguageModel
-
-#from nlp_fluency.models import NgramsLanguageModel
+from nlp_fluency.models import NgramsLanguageModel
 
 #torch
 import torch
@@ -25,12 +21,11 @@ from torch.nn.modules import transformer
 from transformers import BertModel, BertTokenizerFast
 from evaluate import load
 
+from model.model import *
+from model.data import *
+from model.evaluation import *
+from model.config import Config
 
-from model import *
-from data import *
-from evaluation import *
-
-from config import Config
 if not os.path.exists(Config.model_dir):
     os.mkdir(Config.model_dir)
 
@@ -86,7 +81,7 @@ def train(model, tokenizer, device, criterion, optimizer,
                 pbar.update(1)
         #eval model with dev data
         curr_model_path = f'{model_dir}/epoch_{e+1}.bin'
-        torch.save(model, curr_model_path)
+        torch.save(model.state_dict(), curr_model_path)
         
 
         curr_cer = evaluation(model, tokenizer, device, dev_data, 
@@ -112,19 +107,17 @@ with open(Config.ngram_dict_dir + '/' +'trigram.json') as d:
 
 nlp_fluency_lm = NgramsLanguageModel.from_pretrained(Config.nlp_fluency_lm_path)
     
-if not os.path.exists("../data"):
-    data_utils.download_data_url("../")
-ws = WS('../data')
-
-#lm = NgramsLanguageModel.from_pretrained("./ngram_dicts/trigram_lm_with_external_corpus")
+if not os.path.exists("./data"):
+    data_utils.download_data_url("./")
+ws = WS('./data')
 
 
 
-train_data, dev_data = data_handler(data_path=f'../data_preprocess/preprocessed_train_all.csv',
+train_data, dev_data = data_handler(data_path=f'./data_preprocess/preprocessed_train_all.csv',
                                      output_path_list=[f'{Config.model_dir}/train_data.csv',
                                                        f'{Config.model_dir}/dev_data.csv'],
                                      sample_or_split='split', 
-                                     sample_or_train_ratio=0.01,
+                                     sample_or_train_ratio=0.8,
                                      max_len=200)
 
 

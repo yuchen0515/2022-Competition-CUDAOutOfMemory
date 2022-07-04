@@ -18,16 +18,14 @@ from tqdm import tqdm
 from transformers import BertTokenizerFast
 from ckiptagger import data_utils, WS
 
-import sys
-sys.path.insert(1, '../nlp_fluency')
-from models import NgramsLanguageModel
+from nlp_fluency.models import NgramsLanguageModel
 
 
 
 
 print("Convert Json to CSV...")
 # Convert Json to CSV
-with open('./train_all.json', encoding='utf-8') as f:
+with open('./data_preprocess/train_all.json', encoding='utf-8') as f:
     data = json.load(f)
     
 ground_truth_list = []
@@ -50,11 +48,11 @@ data_dict = {'ground_truth_sentence':ground_truth_list,
              'id': id_list}
 
 output_df = pd.DataFrame(data=data_dict)
-output_df.to_csv('./train_all.csv', index=False)        
+output_df.to_csv('./data_preprocess/train_all.csv', index=False)        
 print("Done")
 
 print("Preprocessing...")    
-data = pd.read_csv('./train_all.csv')
+data = pd.read_csv('./data_preprocess/train_all.csv')
 # Check Alphabets/numerals/Chinese numerals
 re_filter_eng = r'[a-zA-Z]'
 re_filter_numbers = r'\d+'
@@ -135,20 +133,20 @@ data['ground_truth_length'] = data['ground_truth_sentence'].apply(lambda x: len(
 data['phoneme_length'] = data['split_phoneme'].apply(lambda x: len(x))
 data['converted_sentence_length'] = data['converted_sentence'].apply(lambda x: len(x))
 
-data.to_csv('./preprocessed_train_all.csv', index=False)
+data.to_csv('./data_preprocess/preprocessed_train_all.csv', index=False)
 
 print("Done")
 
 #Build N-Gram Language Model
 print("building N-Gram LM...")
 
-data = pd.read_csv('./preprocessed_train_all.csv')
+data = pd.read_csv('./data_preprocess/preprocessed_train_all.csv')
 
-if not os.path.exists("../data"):
+if not os.path.exists("./data"):
     print("ckiptagger model not exists, Downloading...")
-    data_utils.download_data_url("../")
+    data_utils.download_data_url("./")
     print("Downloaded")
-ws = WS('../data')
+ws = WS('./data')
 
 ground_truth = list(set(data['ground_truth_sentence'].values))
 ground_truth = ws(ground_truth)
@@ -167,16 +165,16 @@ uni_gram_dict = dict((key[0], value) for key, value in uni_gram_counter.items())
 bi_gram_dict = dict((' '.join(key[0:]), value) for key, value in bi_gram_counter.items())
 tri_gram_dict = dict((' '.join(key[0:]), value) for key, value in tri_gram_counter.items())
 
-if not os.path.exists('../ngram_lm'):
-    os.mkdir('../ngram_lm')
+if not os.path.exists('./ngram_lm'):
+    os.mkdir('./ngram_lm')
 
-with open('../ngram_lm/unigram.json', 'w') as fp:
+with open('./ngram_lm/unigram.json', 'w') as fp:
     json.dump(uni_gram_dict, fp)
     
-with open('../ngram_lm/bigram.json', 'w') as fp:
+with open('./ngram_lm/bigram.json', 'w') as fp:
     json.dump(bi_gram_dict, fp)
 
-with open('../ngram_lm/trigram.json', 'w') as fp:
+with open('./ngram_lm/trigram.json', 'w') as fp:
     json.dump(tri_gram_dict, fp)
     
 print('Done')
@@ -185,4 +183,4 @@ print('Done')
 ngram_lm = NgramsLanguageModel(ngram=3, sentence_length=200)
 ngram_lm.train(ground_truth)
     
-ngram_lm.save("../ngram_lm/trigram")
+ngram_lm.save("./ngram_lm/trigram")

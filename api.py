@@ -22,7 +22,6 @@ import numpy as np
 
 from inference.config import *
 from inference.inference import *
-from rnn_inference import *
 from inference.model import *
 
 # Other tools
@@ -32,23 +31,18 @@ from service_streamer import ThreadedStreamer
 # Pre-load model
 app = Flask(__name__)
 
-model_path = r"./model/Stock-Origin_epoch4.bin"
-tokenizer_path = r"./bert-base-chinese"
-device = r"cuda:1"
-ws_path = r"./ckip_data"
-ngram_dict_dir = r"./ngram_dicts"
-trigram_lm_dir = r"./ngram_dicts/trigram_lm_with_external_corpus"
+model_path = r"./trained_model/Stock-Origin_epoch4.bin"
+tokenizer_path = r"bert-base-chinese"
+device = 'cuda:0' if torch.cuda.is_available() else 'cpu' 
+ws_path = r"./data"
+ngram_dict_dir = r"./ngram_lm"
+trigram_lm_dir = r"./ngram_lm/trigram"
 
-model = torch.load(model_path, map_location=device)
 tokenizer = BertTokenizerFast.from_pretrained(tokenizer_path)
+model = torch.load(model_path, map_location=device)
 
-with open("{}/unigram_no_corpus.json".format(ngram_dict_dir)) as dict:
-    uni_gram_dict = json.load(dict)
-with open("{}/bigram_no_corpus.json".format(ngram_dict_dir)) as dict:
-    bi_gram_dict = json.load(dict)
-with open("{}/unigram_no_corpus.json".format(ngram_dict_dir)) as dict:
+with open("{}/unigram.json".format(ngram_dict_dir)) as dict:
     tri_gram_dict = json.load(dict)
-
 
 trigram_lm = NgramsLanguageModel.from_pretrained(trigram_lm_dir)
 ws = WS(ws_path)
@@ -56,7 +50,7 @@ ws = WS(ws_path)
 inference = Inference(model, tokenizer, device, Config)
 
 streamer = ThreadedStreamer(
-    inference.inference, batch_size=64, max_latency=0.15)
+    inference.only_inference, batch_size=64, max_latency=0.15)
 
 
 ####### PUT YOUR INFORMATION HERE #######
@@ -99,7 +93,7 @@ def predict(sentence_list, phoneme_sequence_list, retry):
 
     if retry == 2 and len(sentence_list[0]) <= 40:
         sentence_list = sentence_list[:1]
-        _, corrected_list_temp = streamer.predict(sentence_list)
+        corrected_list_temp = streamer.predict(sentence_list)
         corrected_sentence_list.append(corrected_list_temp[0])
         print("test: correct", corrected_sentence_list)
 

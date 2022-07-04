@@ -3,19 +3,17 @@ import re
 
 from evaluate import load
 from tqdm import tqdm
-from data import *
-from model import *
 from ckiptagger import WS
 
 from torch.utils.data import Dataset, DataLoader
 from einops import rearrange
 
-from config import Config
-from perplexity import *
+from inference.config import Config
+from inference.perplexity import *
 
-import sys
-sys.path.insert(1, '../nlp_fluency')
-from models import NgramsLanguageModel
+from nlp_fluency.models import NgramsLanguageModel
+from model.data import *
+from model.model import *
 
 
 def generate_mask(length):
