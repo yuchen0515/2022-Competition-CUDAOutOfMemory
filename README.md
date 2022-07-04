@@ -1,12 +1,3 @@
----
-
-title: README
-image: https://i3.read01.com/SIG=1n8sj6l/304f70713475676f4759.jpg
-
----
-
-
-
 # README
 
 |組員|信箱|職責|
