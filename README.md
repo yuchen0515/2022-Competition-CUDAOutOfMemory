@@ -8,7 +8,6 @@ image: https://i3.read01.com/SIG=1n8sj6l/304f70713475676f4759.jpg
 
 
 # README
-> Reference example: https://github.com/Esun-DF/ai_competition_api_sharedoc/tree/features/2022-share-doc/model-spec
 
 |組員|信箱|職責|
 |:--|:--|:--|
@@ -23,42 +22,58 @@ image: https://i3.read01.com/SIG=1n8sj6l/304f70713475676f4759.jpg
     $tree -L 2
     
     .
+	├── README.md
 	├── data_preprocess
+	│   ├── __init__.py
 	│   ├── data_preprocess.py
-	│   ├── external_data_preprocess.py
-	│   └── __init__.py
-	├── Dockerfile
+	│   └── external_data_preprocess.py
 	├── inference
+	│   ├── __init__.py
 	│   ├── config.py
 	│   ├── dataset_inference.py
 	│   ├── inference.py
-	│   ├── __init__.py
 	│   ├── model.py
 	│   ├── perplexity.py
 	│   ├── search_method.py
 	│   └── word_converter.py
 	├── model
+	│   ├── __init__.py
 	│   ├── config.py
 	│   ├── data.py
 	│   ├── evaluation.py
-	│   ├── __init__.py
 	│   ├── model.py
 	│   ├── perplexity.py
 	│   └── train.py
+	├── data
+	│   ├── embedding_character
+	│   ├── embedding_word
+	│   ├── LICENSE
+	│   ├── model_ner
+	│   ├── model_pos
+	│   └── model_ws
+	├── ngram_lm
+	│   ├── bigram.json
+	│   ├── trigram
+	│   ├── trigram.json
+	│   └── unigram.json
 	├── nlp_fluency
-	│   ├── example.py
 	│   ├── __init__.py
+	│   ├── example.py
 	│   ├── LICENSE
 	│   ├── models.py
-	│   ├── __pycache__
 	│   ├── README.md
 	│   └── train_ngramslm.py
-	├── __pycache__
-	│   └── api.cpython-39.pyc
-	├── README.md
+	├── trained_model
+	│   └── Stock-Origin_epoch4.bin
+	├── Dockerfile
+	├── api.py
 	└── requirements.txt
     ```
-* 補充
+* **注意**
+    * `ngram_lm` 內檔案較大，故請至 [ngram_lm Link](https://drive.google.com/drive/folders/196FIAexcXiARKcU2NdkRAMpphOxDeajF?usp=sharing) 下載該資料夾，並放置於專案目錄下，如同上述檔案結構。
+    * `trained_model` 檔案亦較大，同樣請至 [trained_model Link](https://drive.google.com/drive/folders/1SWbF1ZW-H3NIk-W8Uvi2cr72MRzZDATk?usp=sharing) 下載，放置於專案目錄下，如同上述檔案結構。
+    * 下載後之檔案，**務必**遵循上述之檔案結構！
+* **補充**
     * [nlp_fluency](https://github.com/baojunshan/nlp-fluency) 為 Github 上開源專案，用以協助評估語句之「流暢度」所用。
     * 可直接用 Docker 架設基於本隊程式碼的 API Server。
 
@@ -120,94 +135,91 @@ opencc-python-reimplemented==0.1.6
 * 在推論的部分請仔細說明推論邏輯以及各個函數的作用
 
 ## 執行範例
-範例執行功能為最低描述需求，參賽者可依照團隊需求增述
+### 虛擬環境
+```
+# 安裝虛擬環境
+$ python3 -m venv venv
 
-* 虛擬環境
-    ```
-    # 安裝虛擬環境
-    $ python3 -m venv venv
-    
-    # 啟動虛擬環境 
-    $ source venv/bin/activate
-    
-    # 安裝所需套件
-    $ pip install -r requirements.txt 
-    ```
+# 啟動虛擬環境 
+$ source venv/bin/activate
 
-* 資料前處理
+# 安裝所需套件
+$ pip install -r requirements.txt 
+```
 
-    在資料前處理的階段中，我們針對了部分大寫數字進行了轉換，而其中一些大寫數字（參肆伍陸拾）因爲出現了不少同音異義 / 異音異義的詞，不好處理故選擇跳過
+### 資料前處理
+在資料前處理的階段中，我們針對了部分大寫數字進行了轉換，而其中一些大寫數字（參肆伍陸拾）因爲出現了不少同音異義 / 異音異義的詞，不好處理故選擇跳過\
+\
+在前處理的同時，我們也把Ground Truth的60000句文本提取出來，結合來自CLMAD Corpus Dataset的Finance/Stock Topic文本，利用NLTK套件建立了1/2/3-Gram的Language Model，用於後續的困惑度計算
+```
+# 執行前處理
+$ python -m data_preprocess.data_preprocess
+# 下載/轉換/生成額外的噪音文本
+$ python -m data_preprocess.external_data_preprocess
+```
 
-    在前處理的同時，我們也把Ground Truth的60000句文本提取出來，結合來自CLMAD Corpus Dataset的Finance/Stock Topic文本，利用NLTK套件建立了1/2/3-Gram的Language Model，用於後續的困惑度計算
-    
-    ```
-    # 執行前處理
-    $ python -m data_preprocess.data_preprocess
-    # 下載/轉換/生成額外的噪音文本
-    $ python -m data_preprocess.external_data_preprocess
-    
-    ```
-    
+### 模型訓練
+本次參賽用的模型採用了基本的 Transformer Encoder-Decoder 模型進行訓練，採用了 6 層 Encoder/Decoder 的結構\
+\
+模型在執行面上是以文本翻譯之概念爲基礎進行文本修正，旨在嘗試將“錯誤文本”翻譯成“正確文本”
+```
+# 一些模型訓練參數
+Optimizer=AdamW
+Activation Function=Relu
+Learing Rate=0.0001
+Dropout=0.2
+Epoch=6
+```
+```
+# 執行模型訓練
+$ python -m model.train
+```
 
-* 模型訓練
-    本次參賽用的模型採用了基本的Transformer Encoder-Decoder模型進行訓練，採用了6層Encoder/Decoder的結構
+### 模型推論
+用 Input 提供之文本輸入至 Model 中，利用 Greedy Search Inference 出每句 Input 之修正句\
+\
+其後計算各句（含 Input 句）之 3-Gram 困惑度，取最低者作最終 Output
+```
+# 執行模型推論
+$ python -m inference.inference --input_path INPUT_PATH --model_path MODEL_PATH --ngram_dict_dir NGRAM_DICT_DIR --nlp_fluency_dir NLP_FLUENCY_DIR
+```
 
-    模型在執行面上是以文本翻譯之概念爲基礎進行文本修正，旨在嘗試將“錯誤文本”翻譯成“正確文本”
-    
+### API Server
+* 本隊提供 **Docker** 之 API 伺服器架設方式
+* 您只需安裝好 docker ([Tutorial](https://docs.docker.com/engine/install/ubuntu/))，接著在本專案目錄下依循下列指令操作即可：
+```
+sudo docker build . -t mathlin/cudaoutofmemory
+sudo docker run -p 614:614 -d mathlin/cudaoutofmemory
+```
+* 當然，您也可以簡單地先以一般形式測試，如下：
+```
+python3 -m api
+```
+* 附註
+    * `mathlin/cudaoutofmemory` 為建立之容器名稱，您可以按照自己的喜好命名。
+    * build 階段時，會按照 Dockerfile 指定安裝、執行檔案，最終會在後台持續運行 `api.py`
+    * run 階段則是啟動容器 (Image)，此時即可按您的 ip，port:614 傳送資料並取得結果
+    * 此啟動形式一般只可用 CPU，本隊於正式賽時是使用 nvidia-docker (較為麻煩) 啟動 GPU 架設 API Server，故若要使用 GPU，請在主機上安裝好 **nvidia-docker** ([ref](https://github.com/NVIDIA/nvidia-docker))，並按照以下指令操作(device 需看自己主機上的 GPU 編號)：
     ```
-    # 一些模型訓練參數
-    Optimizer=AdamW
-    Activation Function=Relu
-    Learing Rate=0.0001
-    Dropout=0.2
-    Epoch=6
+    sudo nvidia-docker build . -t mathlin/cudaoutofmemory
+    sudo nvidia-docker run --gpus='"device=0,1"' -p 614:614 -d mathlin/cudaoutofmemory
     ```
-
+    * 若需要查詢執行狀況，建議按以下方式操作：
     ```
-    # 執行模型訓練
-    $ python -m model.train
+    docker ps
+    docker logs [CONTAINER_ID]
     ```
-* 模型推論
-    用Input提供之文本輸入至Model中，利用Greedy Search Inference出每句Input之修正句
-    
-    其後計算各句（含Input句）之3-Gram困惑度，取最低者作最終Output
-    
+    * 先前 pre_trained 的模型是 **bin** 檔，而後 inference 訓練改用 state file，因此若您按照我們的方式訓練模型，而後讀取模型時就確保 load **parameter 一致**，且 `api.py` 讀取時請將對應的程式碼更改如下：
     ```
-    # 執行模型推論
-    $ python -m inference.inference --input_path INPUT_PATH --model_path MODEL_PATH --ngram_dict_dir NGRAM_DICT_DIR --nlp_fluency_dir NLP_FLUENCY_DIR
+    # model = torch.load(model_path, map_location=device)
+    model = GecTransformer(max_len=200,
+            num_of_vocab=tokenizer.vocab_size,
+            d_model=512,
+      nhead=8,
+      num_encoder_layers=6,
+      num_decoder_layers=6,
+      dim_feedforward=2048,
+      dropout=0.2,
+      activation="relu")
+   model.load_state_dict(torch.load(model_path, map_location=device))
     ```
-* API Server
-    * 本隊提供 **Docker** 之 API 伺服器架設方式
-    * 您只需安裝好 docker ([Tutorial](https://docs.docker.com/engine/install/ubuntu/))，接著在本專案目錄下依循下列指令操作即可：
-    ```bash
-    sudo docker build . -t mathlin/cudaoutofmemory
-    sudo docker run -p 614:614 -d mathlin/cudaoutofmemory
-    ```
-    * 附註
-        * `mathlin/cudaoutofmemory` 為建立之容器名稱，您可以按照自己的喜好命名。
-        * build 階段時，會按照 Dockerfile 指定安裝、執行檔案，最終會在後台持續運行 `api.py`
-        * run 階段則是啟動容器 (Image)，此時即可按您的 ip，port:614 傳送資料並取得結果
-        * 此啟動形式一般只可用 CPU，本隊於正式賽時是使用 nvidia-docker (較為麻煩) 啟動 GPU 架設 API Server，故若要使用 GPU，請在主機上安裝好 **nvidia-docker** ([ref](https://github.com/NVIDIA/nvidia-docker))，並按照以下指令操作(device 需看自己主機上的 GPU 編號)：
-        ```bash
-        sudo nvidia-docker build . -t mathlin/cudaoutofmemory
-        sudo nvidia-docker run --gpus='"device=0,1"' -p 614:614 -d mathlin/cudaoutofmemory
-        ```
-        * 若需要查詢執行狀況，建議按以下方式操作：
-        ```bash
-        docker ps
-        docker logs [CONTAINER_ID]
-        ```
-        * 先前 pre_trained 的模型是 **bin** 檔，而後 inference 訓練改用 state file，因此若您按照我們的方式訓練模型，而後讀取模型時就確保 load **parameter 一致**，且 `api.py` 讀取時請將對應的程式碼更改如下：
-        ```python3
-        # model = torch.load(model_path, map_location=device)
-        model = GecTransformer(max_len=200,
-                num_of_vocab=tokenizer.vocab_size,
-                d_model=512,
-		        nhead=8,
-		        num_encoder_layers=6,
-		        num_decoder_layers=6,
-		        dim_feedforward=2048,
-		        dropout=0.2,
-		        activation="relu")
-       model.load_state_dict(torch.load(model_path, map_location=device))
-        ```
