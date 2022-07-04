@@ -14,16 +14,14 @@ from transformers import BertModel, BertTokenizerFast
 
 from ckiptagger import WS, data_utils
 
-import sys
-sys.path.insert(1, '../nlp_fluency')
-from models import NgramsLanguageModel
+from nlp_fluency.models import NgramsLanguageModel
 
-from dataset_inference import *
-from config import Config
-from word_converter import *
-from model import *
-from perplexity import *
-from search_method import *
+from inference.dataset_inference import *
+from inference.config import Config
+from inference.word_converter import *
+from inference.model import *
+from inference.perplexity import *
+from inference.search_method import *
 
 class Inference:
     def __init__(self, model, tokenizer, device, Config):
@@ -59,8 +57,11 @@ class Inference:
             corrected_sentence_list = greedy_search(self.model, self.tokenizer, self.device, batch, inference_dataloader.batch_size)
                   
         
-        return sentence_list, corrected_sentence_list
+        return input_sentences, corrected_sentence_list
 
+    def only_inference(self, input_sentences):
+        _, corrected_sentence_list = self.inference(input_sentences)
+        return corrected_sentence_list
 
 
 
@@ -68,50 +69,67 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_path', type=str, default=None, help='Your input json file path')
     parser.add_argument('--model_path', type=str, help='Your inference model path')
-    parser.add_argument('--tokenizer_path', type=str, default='bert-base-chinese', help='Your pre-trained tokenizer model path')
+    parser.add_argument('--tokenizer_path', type=str, default='ckiplab/bert-base-chinese', help='Your pre-trained tokenizer model path')
     parser.add_argument('--device', type=str, default='cuda:0', help='Graphic card(or cpu) which used in model inference')
-    parser.add_argument('--ws_path', type=str, default='../data', help='pre-trained(?) model of ckip word segment model')
+    parser.add_argument('--ws_path', type=str, default='./data', help='pre-trained(?) model of ckip word segment model')
     parser.add_argument('--ngram_dict_dir', type=str, default=None, help='directory of ngrams dictionary')
     parser.add_argument('--nlp_fluency_dir', type=str, default='', help='Use NLP Fluency or not')
-    
+
     args = parser.parse_args()
-    
+
     input_path = args.input_path
     model_path = args.model_path
     tokenizer_path = args.tokenizer_path
     device = args.device
     if device != 'cpu':
         device = device if torch.cuda.is_available() else 'cpu'
-    
+
     ws_path = args.ws_path
     ngram_dict_dir = args.ngram_dict_dir
     nlp_fluency_dir = args.nlp_fluency_dir
-    
-    model = torch.load(model_path, map_location=device)
+
+
+
+    #model = torch.load(model_path, map_location=device)
     tokenizer = BertTokenizerFast.from_pretrained(tokenizer_path)
+    model = GecTransformer(max_len=200, 
+                           num_of_vocab=tokenizer.vocab_size, 
+                           d_model=512, 
+                           nhead=8, 
+                           num_encoder_layers=6, 
+                           num_decoder_layers=6, 
+                           dim_feedforward=2048, 
+                           dropout=0.2,
+                           activation="relu")
+    model.load_state_dict(torch.load(model_path, map_location=device))
     
+
+
     with open(ngram_dict_dir + '/' +'unigram.json') as dict:
         uni_gram_dict = json.load(dict)
     with open(ngram_dict_dir + '/' +'bigram.json') as dict:
         bi_gram_dict = json.load(dict)
     with open(ngram_dict_dir + '/' +'trigram.json') as dict:
         tri_gram_dict = json.load(dict)
-    
+
+
     if nlp_fluency_dir != '':
         print('Use NLP Fluency')
         use_nlp_fluency = True
         nlp_fluency_lm = NgramsLanguageModel.from_pretrained(nlp_fluency_dir)
     else:
         use_nlp_fluency = False
-    
-    
+
+
+
     if not os.path.exists(ws_path):
         print("ckiptagger model not exists, Downloading...")
-        data_utils.download_data_url("../")
-        ws_path = '../data'
+        data_utils.download_data_url("./")
+        ws_path = './data'
         print("Downloaded")
     ws = WS(ws_path)
-    
+
+
     start = time.time()
     if input_path == None:
         #some sample
@@ -120,11 +138,13 @@ if __name__ == '__main__':
         with open(input_path, encoding='utf-8') as f:
             data = json.load(f)
             sentence_list = data['sentence_list']
-    
+
     inference = Inference(model, tokenizer, device, Config)
 
     sentence_list, corrected_sentence_list = inference.inference(sentence_list)
-    
+
+
+
     if use_nlp_fluency == True:
         corrected_perpelxity_list = []
         for corrected_sentence in corrected_sentence_list:
@@ -132,12 +152,12 @@ if __name__ == '__main__':
     else:
         corrected_perpelxity_list = trigram_perplexity(corrected_sentence_list, 
                                                        ws, uni_gram_dict, bi_gram_dict, tri_gram_dict)
-    
+
     ranking = np.argsort(corrected_perpelxity_list)
     best_sentence = corrected_sentence_list[ranking[0]]
-    
+
     end = time.time()
-    
+
     print('Source sentences:', sentence_list)
     print(f'The best perplexity sentnece:{best_sentence}({corrected_perpelxity_list[ranking[0]]})')
     print('inference time:', end-start)
