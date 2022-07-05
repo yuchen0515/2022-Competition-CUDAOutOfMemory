@@ -6,6 +6,20 @@
 |梁俊彥 Chon-In Leong|  ivan000105@gmail.com| NLP Model|
 
  
+## 安裝方式
+請參考以下安裝方式：
+```
+git clone git@github.com:yuchen0515/2022-Competition-CUDAOutOfMemory.git
+```
+
+如此能安裝本隊之程式碼，然而因為我們有使用其他開源專案之程式碼 `nlp_fluency`，因此目前會是空的，我們必須初始化 submodule 才可以，因此：
+
+```
+git submodule init
+git submodule update
+```
+
+即可完成專案之安裝，不過請注意！！大型模型檔案尚未下載，此部分請參考下一節：**程式架構** 下載之。
  
 ## 程式架構
 * 程式碼之結構，已依循 [官方要求](https://github.com/Esun-DF/ai_competition_api_sharedoc/blob/features/2022-share-doc/model-spec/README.md)，**必須** 檢附之資料夾以及檔案均有附上。(例：`data_preprocess`, `inference`, `model`, etc.)
@@ -17,6 +31,7 @@
 	├── data_preprocess
 	│   ├── __init__.py
 	│   ├── data_preprocess.py
+	│   ├── train_all.json
 	│   └── external_data_preprocess.py
 	├── inference
 	│   ├── __init__.py
@@ -35,13 +50,6 @@
 	│   ├── model.py
 	│   ├── perplexity.py
 	│   └── train.py
-	├── data
-	│   ├── embedding_character
-	│   ├── embedding_word
-	│   ├── LICENSE
-	│   ├── model_ner
-	│   ├── model_pos
-	│   └── model_ws
 	├── ngram_lm
 	│   ├── bigram.json
 	│   ├── trigram
@@ -63,6 +71,7 @@
 * **注意**
     * `ngram_lm` 內檔案較大，故請至 [ngram_lm Link](https://drive.google.com/drive/folders/196FIAexcXiARKcU2NdkRAMpphOxDeajF?usp=sharing) 下載該資料夾，並放置於專案目錄下，如同上述檔案結構。
     * `trained_model` 檔案亦較大，同樣請至 [trained_model Link](https://drive.google.com/drive/folders/1SWbF1ZW-H3NIk-W8Uvi2cr72MRzZDATk?usp=sharing) 下載，放置於專案目錄下，如同上述檔案結構。
+    * `data_preprocess/train_all.json` 是官方的訓練檔案，因資料不方便公開，還請使用者自行準備，放置在該路徑上才可正常執行程式。
     * 下載後之檔案，**務必**遵循上述之檔案結構！
 * **補充**
     * [nlp_fluency](https://github.com/baojunshan/nlp-fluency) 為 Github 上開源專案，用以協助評估語句之「流暢度」所用。
@@ -119,13 +128,8 @@ opencc-python-reimplemented==0.1.6
 - [service streamer](https://github.com/ShannonAI/service-streamer) 是 Github 上的開源專案，可協助 api 導入 batch 功能以增進效能。
 
 
-## 執行方式及原始碼 (TBD)
-* 請說明從資料源頭至答案產出執行過程，範例可以參考下方**執行範例** 
-* 請於重點設計程式上加上註解
-* 在資料處理的部分請仔細說明所使用的工具，完整處理邏輯，如果有用到額外資料也請附上資料來源以及處理邏輯
-* 在推論的部分請仔細說明推論邏輯以及各個函數的作用
+## 執行方式及原始碼
 
-## 執行範例
 ### 虛擬環境
 ```
 # 安裝虛擬環境
@@ -141,6 +145,8 @@ $ pip install -r requirements.txt
 ### 資料前處理
 在資料前處理的階段中，我們針對了部分大寫數字進行了轉換，而其中一些大寫數字（參肆伍陸拾）因爲出現了不少同音異義 / 異音異義的詞，不好處理故選擇跳過\
 \
+本次競賽使用了OpenSLR資料庫中的CLMAD Dataset作爲額外訓練的文本，根據本次比賽文本的主題，從中挑選了Stock/Finance兩個Topic的Corpus作爲額外文本。由於CLMAD爲簡體中文文本，所以在前處理階段使用了OpenCC Library進行了文本的簡繁轉換，並對文本進行產生噪音的動作（插入/刪除/替換隨機文字），產出用於文本修正訓練之錯誤文本。
+
 在前處理的同時，我們也把Ground Truth的60000句文本提取出來，結合來自CLMAD Corpus Dataset的Finance/Stock Topic文本，利用NLTK套件建立了1/2/3-Gram的Language Model，用於後續的困惑度計算
 ```
 # 執行前處理
@@ -174,6 +180,20 @@ $ python -m model.train
 # 執行模型推論
 $ python -m inference.inference --input_path INPUT_PATH --model_path MODEL_PATH --ngram_dict_dir NGRAM_DICT_DIR --nlp_fluency_dir NLP_FLUENCY_DIR
 ```
+
+* inference/inference.py 之各參數說明
+
+
+| Arg Name| Data Type| Description| Default| Necessary|
+|:--| :--| :--| :--| :--|
+| input_path| String| 用作Inference之Input File Path，Input File須爲Json File，若不提供則會以程式碼中之範例作Inference| None| No|
+| model_path| String| 負責進行Inference之Model Path| --| Yes|
+| tokenizer_path  | String    | BertTokenizerFast之Pre-trained Model Path，建議使用“ckiplab/bert-base-chinese”| “ckiplab/bert-base-chinese”| Yes|
+| device| String| 用於進行Inference之裝置，可使用CUDA，預設使用CPU| “cpu”| No|
+| ws_path| String| 在Inference中，使用ckiplab之分詞工具，故需要事先下載對應之Pre-trained model，若不提供Pre-trained model path，程式將會自行下載| “./data”| No|
+| ngram_dict_dir  | String| 用於計算文本困惑度之N-Gram LM資料夾路徑，在Preprocess階段會一併生成| --| Yes|
+| nlp_fluency_dir | String| 用於計算文本困惑度之N-Gram LM資料夾路徑，在Preprocess階段會一併生成，與ngram_dict_dir之差異爲使用了第三方工具進行計算，如有提供路徑則會優先使用 | None| No|
+
 
 ### API Server
 * 本隊提供 **Docker** 之 API 伺服器架設方式
@@ -213,4 +233,6 @@ python3 -m api
       dropout=0.2,
       activation="relu")
    model.load_state_dict(torch.load(model_path, map_location=device))
+    ```
+
     ```

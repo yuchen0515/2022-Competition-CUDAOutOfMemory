@@ -70,10 +70,10 @@ if __name__ == '__main__':
     parser.add_argument('--input_path', type=str, default=None, help='Your input json file path')
     parser.add_argument('--model_path', type=str, help='Your inference model path')
     parser.add_argument('--tokenizer_path', type=str, default='ckiplab/bert-base-chinese', help='Your pre-trained tokenizer model path')
-    parser.add_argument('--device', type=str, default='cuda:0', help='Graphic card(or cpu) which used in model inference')
+    parser.add_argument('--device', type=str, default='cpu', help='Graphic card(or cpu) which used in model inference')
     parser.add_argument('--ws_path', type=str, default='./data', help='pre-trained(?) model of ckip word segment model')
-    parser.add_argument('--ngram_dict_dir', type=str, default=None, help='directory of ngrams dictionary')
-    parser.add_argument('--nlp_fluency_dir', type=str, default='', help='Use NLP Fluency or not')
+    parser.add_argument('--ngram_dict_dir', type=str, help='directory of ngrams dictionary')
+    parser.add_argument('--nlp_fluency_dir', type=str, default=None, help='Use NLP Fluency or not')
 
     args = parser.parse_args()
 
