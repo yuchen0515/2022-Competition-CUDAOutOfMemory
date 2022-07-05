@@ -113,7 +113,7 @@ if __name__ == '__main__':
         tri_gram_dict = json.load(dict)
 
 
-    if nlp_fluency_dir != '':
+    if nlp_fluency_dir is not None:
         print('Use NLP Fluency')
         use_nlp_fluency = True
         nlp_fluency_lm = NgramsLanguageModel.from_pretrained(nlp_fluency_dir)
