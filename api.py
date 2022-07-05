@@ -33,7 +33,7 @@ app = Flask(__name__)
 
 model_path = r"./trained_model/Stock-Origin_epoch4.bin"
 tokenizer_path = r"bert-base-chinese"
-device = 'cuda:0' if torch.cuda.is_available() else 'cpu' 
+device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 ws_path = r"./data"
 ngram_dict_dir = r"./ngram_lm"
 trigram_lm_dir = r"./ngram_lm/trigram"
