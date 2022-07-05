@@ -234,5 +234,3 @@ python3 -m api
       activation="relu")
    model.load_state_dict(torch.load(model_path, map_location=device))
     ```
-
-    ```
