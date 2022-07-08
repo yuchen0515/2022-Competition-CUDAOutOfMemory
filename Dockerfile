@@ -1,4 +1,4 @@
-FROM python:3.7.6-slim
+FROM tensorflow/tensorflow:latest-gpu-py3
 
 WORKDIR /app
 
