@@ -1,236 +1,272 @@
-# README
-
-|組員|信箱|職責|
-|:--|:--|:--|
-|林育辰 Yu-Chen Lin|i98565412@gmail.com|API Server|
-|梁俊彥 Chon-In Leong|  ivan000105@gmail.com| NLP Model|
-
- 
-## 安裝方式
-請參考以下安裝方式：
-```
-git clone git@github.com:yuchen0515/2022-Competition-CUDAOutOfMemory.git
-```
-
-如此能安裝本隊之程式碼，然而因為我們有使用其他開源專案之程式碼 `nlp_fluency`，因此目前會是空的，我們必須初始化 submodule 才可以，因此：
-
-```
-git submodule init
-git submodule update
-```
-
-即可完成專案之安裝，不過請注意！！大型模型檔案尚未下載，此部分請參考下一節：**程式架構** 下載之。
- 
-## 程式架構
-* 程式碼之結構，已依循 [官方要求](https://github.com/Esun-DF/ai_competition_api_sharedoc/blob/features/2022-share-doc/model-spec/README.md)，**必須** 檢附之資料夾以及檔案均有附上。(例：`data_preprocess`, `inference`, `model`, etc.)
-    ```
-    $tree -L 2
-    
-    .
-	├── README.md
-	├── data_preprocess
-	│   ├── __init__.py
-	│   ├── data_preprocess.py
-	│   ├── train_all.json
-	│   └── external_data_preprocess.py
-	├── inference
-	│   ├── __init__.py
-	│   ├── config.py
-	│   ├── dataset_inference.py
-	│   ├── inference.py
-	│   ├── model.py
-	│   ├── perplexity.py
-	│   ├── search_method.py
-	│   └── word_converter.py
-	├── model
-	│   ├── __init__.py
-	│   ├── config.py
-	│   ├── data.py
-	│   ├── evaluation.py
-	│   ├── model.py
-	│   ├── perplexity.py
-	│   └── train.py
-	├── ngram_lm
-	│   ├── bigram.json
-	│   ├── trigram
-	│   ├── trigram.json
-	│   └── unigram.json
-	├── nlp_fluency
-	│   ├── __init__.py
-	│   ├── example.py
-	│   ├── LICENSE
-	│   ├── models.py
-	│   ├── README.md
-	│   └── train_ngramslm.py
-	├── trained_model
-	│   └── Stock-Origin_epoch4.bin
-	├── Dockerfile
-	├── api.py
-	└── requirements.txt
-    ```
-* **注意**
-    * `ngram_lm` 內檔案較大，故請至 [ngram_lm Link](https://drive.google.com/drive/folders/196FIAexcXiARKcU2NdkRAMpphOxDeajF?usp=sharing) 下載該資料夾，並放置於專案目錄下，如同上述檔案結構。
-    * `trained_model` 檔案亦較大，同樣請至 [trained_model Link](https://drive.google.com/drive/folders/1SWbF1ZW-H3NIk-W8Uvi2cr72MRzZDATk?usp=sharing) 下載，放置於專案目錄下，如同上述檔案結構。
-    * `data_preprocess/train_all.json` 是官方的訓練檔案，因資料不方便公開，還請使用者自行準備，放置在該路徑上才可正常執行程式。
-    * 下載後之檔案，**務必**遵循上述之檔案結構！
-* **補充**
-    * [nlp_fluency](https://github.com/baojunshan/nlp-fluency) 為 Github 上開源專案，用以協助評估語句之「流暢度」所用。
-    * 可直接用 Docker 架設基於本隊程式碼的 API Server。
-
-## 程式環境
-### 系統平台
-在諸多系統平台考量下，如 TWCC 雲端服務、Google Cloud Platform 等，在費用以及其他因素考量之下，決定模型訓練以及 API Server 架設，均使用 **國立臺灣大學 多媒體資訊檢索實驗室** 之主機配備。
-
-因此模型訓練、程式撰寫以遠端連線(SSH) 主機為主，API Server 之 架設/技術 均為隊伍自行完成。
-
-主機配備規格如下：
+# 【看見你的聲音 - 語音辨識後修正】API Server 架構
 
 
-|設備 | 型號 / 版本 |Note|
+## （一）簡介
+本專案參加玉山銀行舉辦之「看見你的聲音—語音辨識後修正」競賽，隊名為 **CUDAOutOfMemory**，共有兩名成員：林育辰、梁俊彥，前者負責 API 伺服器、後者則主要負責 AI model。本文件為「**最佳 API 服務獎**」之說明文件。
+
+API Server 以 [JMeter](https://jmeter.apache.org/index.html) 作為壓力測試工具評測，在以下條件下進行：
+- 同時有 10 個 clients
+- 每個 clients 皆輪流發送 10 個不同的 request
+- 每個 clients 收到 response 後才傳送下個 request
+
+最終在上述條件，以 Trasformer 模型達到 **14.5 / sec (Throughput)** 的水準，大多數的 Request 能在 1 秒內回傳推論結果。
+
+### 附註：機器規格
+本隊曾考慮過 GCP, AWS 等雲端服務平台，然因費用及其他因素，決定均使用校內 **國立臺灣大學 多媒體資訊檢索實驗室** 的主機設備：
+|| 型號 / 版本 |Note|
 |:--|:--|:--|
 |CPU| Intel(R) Xeon(R) CPU E5-2630 v4 @ 2.20GHz|20 cores|
 |GPU| GeForce GTX 1080 Ti| 2 cores|
 |RAM| 128 GB||
 |OS| Ubuntu 21.04  (Hirsute Hippo)||
 
-### 程式語言
-無論是 AI model 或是 API Server 方面，最終均以 **Python 3.9.5** 版本為主撰寫。
+本文件之所有結果與成效，均在使用 GPU (GeForce GTX 1080 Ti) 情況下達成。
 
-有考慮過 後端 方面以 Node.js 或 Go 等語言撰寫，而後認為後端與 AI model 語言相同較方便處理，並且以主辦方提供之 `api.py` 著手較不容易有疏漏之處，故以 Python 為主要語言。
+## （二）緣起
+起初，我們著重於「**模型精準性**」上，並決定以重量級模型 Transformer 實行，並不斷優化模型的精確度，這也使得推論時間越拉越長，僅作一次 inference 就需高達 2300 ms 的時間，也因此開始不斷精進與研究提高 API 服務效能的方法。
 
-### 函式庫
-**requirements.txt** 請參考如下：
+
+## （三）問題解決與目標
+### 解決之道之一
+每筆高達 2300 ms 的推論時間，起初思考：
+- TOP10 中，真的有必要每個都兼顧嗎？
+- model level 是否應提升，亦可避免 overfitting？
+經過反覆嘗試，前三語句修正、前二語句修正, ...，甚至使用 RNN 模型輔助，但其成效都遜於 baseline。最後只針對 TOP1 糾錯才是結果最佳的，除此以外也將 level 調降，使得每筆 inference 降低到 700 ms。
+
+### 解決之道之二
+然而，仔細觀覽賽事要求：
+- 最多需同時處理 10 筆 requests
+- 每筆 request 需於 1 秒內回傳 (注：後續修改為 2 秒)
+
+隨著同時處理的 request 增加，所需時間也會線性、甚至指數成長。一旦超時，該筆 request 還會再度回傳兩次，容易連鎖使得整體服務壅塞而全盤崩壞。
+
+因此，接著我有幾個目標想完成：
+- Concurrent, API 服務需能異步處理
+- non-timeout, 無法處理的就隨它去吧！
+- GPU speed up
+
+#### Concurrent
+考慮 WSGI, Nginx 等正式環境部署工具，然實測結果比 flask 內建的 Thread 還慢 30% 左右，因此最後以 flask 內建之 Thread 達到 concurrent。
+
+#### non-timeout
+timeout 對於本次競賽損傷是最嚴重的，直接沒有分數。因此對於無法計算、超出本 API 服務能力所及的，直接回傳 TOP1 獲得 baseline 是最實際的。
+
+承襲 concurrent 提到的，flask thread 應用於正式環境部署，對於例外處理較弱，應替接受資料先行篩選，例如：(1) 編碼總長度超過 45 者不予計算，直接給 TOP1，反之則經過 inference 推算。 (2) retry 過的語句就直接不予糾正，避免陷入惡性循環。
+
+原因是 transformer 是字與字間的推算，字的長度也影響著推論速度，一旦遭惡意傳送很長的字串，將會導致服務停滯。
+
+
+#### GPU Speed up
+善用實驗室主機的 GPU，然而使用 docker 要跑 GPU 的話有很多繁瑣的前置作業，因此使用 nvidia-docker 架設服務最為實際。
+
+
+概括而論，引用 GPU 為我們提高 40% 的效能 (800 ms --> 480 ms)，non-timeout 選擇性糾正使我們得以控制能夠在 主機能力所及範圍內**提供滿足競賽需求之服務**。Concurrent 使我們能同時承受十個 request 傳送之。
+
+然而，這樣糾正編碼總長度為 25 的語句已是極限，如下圖：
+![](https://i.imgur.com/x4OPJZl.png)
+
+可以注意到部分的 request 甚至超過 2 秒的限制，因此這樣的效能對於我們而言尚且不足，故有了下個目標：Batch 技術的引入。
+
+### 解決之道之三 —— Batch 批次處理
+先提結論：本方法之導入，為我從 throughput 5.7 / sec 提升至 14.5 /sec，**效率為原本的 254 % 之多**。
+
+我認為 API 在接收 request 時，可以給定一個 "延遲時間"，去累積 request，等時間一到 或 超過某一數量限制，就**批次處理**，如此還可利用 GPU 的平行處理的效能。
+
+因此，找到了 [ShannonAI/service-streamer](https://github.com/ShannonAI/service-streamer) 這套工具，能達到這個需求，實測後 Response time graph 如下：
+![](https://i.imgur.com/hLxn4eJ.png)
+
+可注意到多數 request 皆能在遠超乎主辦方之條件，於 1 秒內回傳結果，而下圖更可看出 throughput 穩定的程度：
+![](https://i.imgur.com/DHux2sQ.png)
+
+以下則為關於 request 的各項處理數據：
+|Label|Samples|Average|Min|Max|Error|Thorughput|
+|:--|:--|:--|:--|:--|:--|:--|
+|HTTP Request|1017|668|263|1248|0.00%|14.5/sec|
+
+
+
+
+## （四）系統架構
+在前三節次中，我們從競賽開始談及，以及接連遇到問題的應對與制定對策，一步步改善我們的 API Server，而在 **系統架構** 將清楚敘述「整體架構」以及 本 API Server 優勢。
+
+### API Server 架構圖
+![](https://i.imgur.com/KosszE5.png)
+1. **[POST]** \
+由主辦方傳送 Requests 至 Server
+2. **[Thread]** \
+Flask server 為每筆 request 建立一個 thread 處理之
+3. **[Queue]** \
+ 延遲 150 ms 以收集 request，收集到 64 筆 或超出時間就批次處理
+4. **[Batch & model]** \
+同時批次處理每個 request，每個 request 都檢查是否「有誤」，無誤後依序前處理、推論 (AI model)、檢查後得到結果
+5. **[Return]** \
+計算出結果後，將結果給予對應的 Thread
+6. **[Response]** \
+由 Thread 回傳給對應的 Request
+
+
+### 優勢
+本架構以 Docker 架置，並且輔以 batch 和例外處理等方式，目標是希望達到：
+1. **便於建置** —— 僅需安裝 Docker，即可輕鬆建置 API Server
+2. **回應速率一致** —— 批次處理技術，使得同時傳一個、兩個或多個 request 時，每筆 request 花費時間會接近。這能讓使用者不會有服務「忽快忽慢」不穩定的感覺。
+3. **例外處理** —— 避免過長或失敗的 request 使服務壅塞
+
+
+## （五）應用技術
+
+本隊 API Server 應用技術之概述：
+- **[pre-load]** \
+API Server 啟動時**預**先載入 pre-trained model。
+- **[batch]** \
+批次處理，使得效率大幅提升，並使所有 request 回應時間接近。
+- **[例外處理]** \
+避免異常的 request 使服務壅塞而中斷。
+- **[concurrent]** \
+使用異步處理，使得其能平行化增進效能，避免 sequential 形式一來一往使效率低落。
+- **[cache]** \
+docker 建置時運用 cache 機制，使得 **re-build** 時建置速度從 15 分鐘 降低至 5 分鐘。
+- **[CUDA]** \
+使用 nvidia-docker 工具，使得 docker 能同時搭配 GPU，以提高效能。
+- **[測試]**
+    - [API 測試] 使用 [postman](https://www.postman.com/) 檢測 API 運作、推論結果
+    - [異步測試] 使用 Python 套件 [grequests](https://pypi.org/project/grequests/) 檢測同時發送多筆 request 所需時間
+    - [壓力測試] 使用 [JMeter](https://jmeter.apache.org/) 作為正式賽事規格乘載力之檢測方式
+ 
+ 
+## （六）程式架構維運技巧
+1. **[Docker]**\
+ 選擇使用 Docker 建置，除了易於建置外，Docker 容器於運行時皆會留下專屬於該 [CONTAINER ID] 的 log 檔案，方便追蹤 api 回應狀況。
+2. **[ArgumentParser]**\
+ 能彈性指定輸入的參數，便於調整與測試。
+3. **[Module]**\
+ 檔案執行形式以 `python3 -m ooxx` 的模組化形式為主，輔以架構化的檔案結構，和資料夾專屬之 `__init__.py`，便於維護不同功能之程式碼。
+4. **[PEP8]**\
+ 遵循 Python **[PEP8](https://peps.python.org/pep-0008/)** code style guideline，維持全體程式碼風格一致，提升可讀與可維護性。
+
+
+## （七）手把手之使用教學
+### (1) 打包
+
+1. 下載本專案，並且載入 submodule (其他開源專案程式碼)
 ```
-jinja2<3.1.0
-markupsafe==2.0.1
-protobuf==3.20.1
-flask==1.1.4
-numpy==1.22.2
-gunicorn==20.1.0
-ckiptagger==0.2.1
-tensorflow==2.8.0
-transformers==4.5.0
-torch==1.11.0
-argparse==1.4.0
-pandas==1.4.1
-einops==0.4.1
-service_streamer==0.1.2
-nltk==3.7
-tqdm==4.62.3
-evaluate==0.1.1
-python-dateutil==2.8.2
-opencc-python-reimplemented==0.1.6
+git clone git@github.com:yuchen0515/2022-Competition-CUDAOutOfMemory.git
+git submodule init
+git submodule update
+```
+2. 下載模型檔案
+- `ngram_lm`: 下載[資料夾](https://drive.google.com/drive/folders/196FIAexcXiARKcU2NdkRAMpphOxDeajF?usp=sharing)後，放置專案主目錄
+- `trained_model`：下載 [檔案](https://drive.google.com/drive/folders/1SWbF1ZW-H3NIk-W8Uvi2cr72MRzZDATk?usp=sharing)，並在專案主目錄建立資料夾 `trained_model`，並將該檔案放在裡面。
+- (optional) `data_preprocess/train_all.json`：此為主辦方提供之訓練資料，架設 API 並不需要，若有 AI model 推論一系列需求的話，請自行準備檔案放置相對應之位置。
+ 
+### (2) Docker
+本隊於正式賽時，Docker 建置使用到 GPU，因此使用 nvidia-docker 建置。您可以評估自己是否要使用 GPU，再選擇下列對應的方式架設 API。
+
+#### 不使用 GPU
+請安裝 docker，安裝方式可參考 [tutorial](https://docs.docker.com/engine/install/)，在此同樣附上 Ubuntu 的 Docker 安裝方式：
+```
+sudo apt-get update
+sudo apt-get install apt-transport-https ca-certificates curl gnupg lsb-release
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install docker-ce docker-ce-cli containerd.io
 ```
 
-值得注意的有以下幾點：
-- api 架設以 `flask` 為主
-- 自行訓練模型時，有使用斷詞工具 `ckiptagger`，相較 `jieba`，其在繁體中文斷詞方面表現較優一些
-- [service streamer](https://github.com/ShannonAI/service-streamer) 是 Github 上的開源專案，可協助 api 導入 batch 功能以增進效能。
-
-
-## 執行方式及原始碼
-
-### 虛擬環境
-```
-# 安裝虛擬環境
-$ python3 -m venv venv
-
-# 啟動虛擬環境 
-$ source venv/bin/activate
-
-# 安裝所需套件
-$ pip install -r requirements.txt 
-```
-
-### 資料前處理
-在資料前處理的階段中，我們針對了部分大寫數字進行了轉換，而其中一些大寫數字（參肆伍陸拾）因爲出現了不少同音異義 / 異音異義的詞，不好處理故選擇跳過\
-\
-本次競賽使用了OpenSLR資料庫中的CLMAD Dataset作爲額外訓練的文本，根據本次比賽文本的主題，從中挑選了Stock/Finance兩個Topic的Corpus作爲額外文本。由於CLMAD爲簡體中文文本，所以在前處理階段使用了OpenCC Library進行了文本的簡繁轉換，並對文本進行產生噪音的動作（插入/刪除/替換隨機文字），產出用於文本修正訓練之錯誤文本。
-
-在前處理的同時，我們也把Ground Truth的60000句文本提取出來，結合來自CLMAD Corpus Dataset的Finance/Stock Topic文本，利用NLTK套件建立了1/2/3-Gram的Language Model，用於後續的困惑度計算
-```
-# 執行前處理
-$ python -m data_preprocess.data_preprocess
-# 下載/轉換/生成額外的噪音文本
-$ python -m data_preprocess.external_data_preprocess
-```
-
-### 模型訓練
-本次參賽用的模型採用了基本的 Transformer Encoder-Decoder 模型進行訓練，採用了 6 層 Encoder/Decoder 的結構\
-\
-模型在執行面上是以文本翻譯之概念爲基礎進行文本修正，旨在嘗試將“錯誤文本”翻譯成“正確文本”
-```
-# 一些模型訓練參數
-Optimizer=AdamW
-Activation Function=Relu
-Learing Rate=0.0001
-Dropout=0.2
-Epoch=6
-```
-```
-# 執行模型訓練
-$ python -m model.train
-```
-
-### 模型推論
-用 Input 提供之文本輸入至 Model 中，利用 Greedy Search Inference 出每句 Input 之修正句\
-\
-其後計算各句（含 Input 句）之 3-Gram 困惑度，取最低者作最終 Output
-```
-# 執行模型推論
-$ python -m inference.inference --input_path INPUT_PATH --model_path MODEL_PATH --ngram_dict_dir NGRAM_DICT_DIR --nlp_fluency_dir NLP_FLUENCY_DIR
-```
-
-* inference/inference.py 之各參數說明
-
-
-| Arg Name| Data Type| Description| Default| Necessary|
-|:--| :--| :--| :--| :--|
-| input_path| String| 用作Inference之Input File Path，Input File須爲Json File，若不提供則會以程式碼中之範例作Inference| None| No|
-| model_path| String| 負責進行Inference之Model Path| --| Yes|
-| tokenizer_path  | String    | BertTokenizerFast之Pre-trained Model Path，建議使用“ckiplab/bert-base-chinese”| “ckiplab/bert-base-chinese”| Yes|
-| device| String| 用於進行Inference之裝置，可使用CUDA，預設使用CPU| “cpu”| No|
-| ws_path| String| 在Inference中，使用ckiplab之分詞工具，故需要事先下載對應之Pre-trained model，若不提供Pre-trained model path，程式將會自行下載| “./data”| No|
-| ngram_dict_dir  | String| 用於計算文本困惑度之N-Gram LM資料夾路徑，在Preprocess階段會一併生成| --| Yes|
-| nlp_fluency_dir | String| 用於計算文本困惑度之N-Gram LM資料夾路徑，在Preprocess階段會一併生成，與ngram_dict_dir之差異爲使用了第三方工具進行計算，如有提供路徑則會優先使用 | None| No|
-
-
-### API Server
-* 本隊提供 **Docker** 之 API 伺服器架設方式
-* 您只需安裝好 docker ([Tutorial](https://docs.docker.com/engine/install/ubuntu/))，接著在本專案目錄下依循下列指令操作即可：
+接著，神奇的時間到了，按照下列指定建立 Docker image 並啟動他：
 ```
 sudo docker build . -t mathlin/cudaoutofmemory
 sudo docker run -p 614:614 -d mathlin/cudaoutofmemory
 ```
-* 當然，您也可以簡單地先以一般形式測試，如下：
+
+當然，上述 image 名稱可以自行更換，第一行指令需待 Docker 環境建置，約需 10~15 分鐘。而我們使用了 **cache** 機制，因此您將 image 刪掉後立即重建，能縮減至 5 分鐘建置完成。
+
+第二行執行後，即是指定 image 運行，此時會建立 "container" 運行之，為避免途中錯誤滋生以致服務中斷，因此要確認程序是否建立成功：
+
 ```
-python3 -m api
+sudo docker ps
 ```
-* 附註
-    * `mathlin/cudaoutofmemory` 為建立之容器名稱，您可以按照自己的喜好命名。
-    * build 階段時，會按照 Dockerfile 指定安裝、執行檔案，最終會在後台持續運行 `api.py`
-    * run 階段則是啟動容器 (Image)，此時即可按您的 ip，port:614 傳送資料並取得結果
-    * 此啟動形式一般只可用 CPU，本隊於正式賽時是使用 nvidia-docker (較為麻煩) 啟動 GPU 架設 API Server，故若要使用 GPU，請在主機上安裝好 **nvidia-docker** ([ref](https://github.com/NVIDIA/nvidia-docker))，並按照以下指令操作(device 需看自己主機上的 GPU 編號)：
-    ```
-    sudo nvidia-docker build . -t mathlin/cudaoutofmemory
-    sudo nvidia-docker run --gpus='"device=0,1"' -p 614:614 -d mathlin/cudaoutofmemory
-    ```
-    * 若需要查詢執行狀況，建議按以下方式操作：
-    ```
-    docker ps
-    docker logs [CONTAINER_ID]
-    ```
-    * 先前 pre_trained 的模型是 **bin** 檔，而後 inference 訓練改用 state file，因此若您按照我們的方式訓練模型，而後讀取模型時就確保 load **parameter 一致**，且 `api.py` 讀取時請將對應的程式碼更改如下：
-    ```
-    # model = torch.load(model_path, map_location=device)
-    model = GecTransformer(max_len=200,
-            num_of_vocab=tokenizer.vocab_size,
-            d_model=512,
-      nhead=8,
-      num_encoder_layers=6,
-      num_decoder_layers=6,
-      dim_feedforward=2048,
-      dropout=0.2,
-      activation="relu")
-   model.load_state_dict(torch.load(model_path, map_location=device))
-    ```
+
+如下圖：
+![](https://i.imgur.com/oAu1VZz.png)
+
+接著在以 postman 測試之：
+![](https://i.imgur.com/8MzeHoL.png)
+
+
+倘若發現 API Server 無法正確回應要求，請先確認 flask 是否已經運行，因此可查詢 Docker log，以上圖為例：
+
+```
+sudo docker logs f4125f2ff3f2
+```
+
+若能看到 `listening ooxx:614/`，那就已經完成了，反之若甚至沒看到 Container id，代表出現錯誤而自行中斷，這時請往上翻第二行指令完成時輸出的一串 id，那就是 container id，可以找到具體的錯誤訊息。
+
+
+#### 使用 GPU
+請安裝 nvidia-docker，而在安裝之前還必須確認：
+- 電腦是否有 GPU？
+- CUDA 是否有安裝？
+- 驅動(Driver)程式是否安裝？
+
+安裝過程可參考 [Medium - Ubuntu 安裝 CUDA cuDNN pytorch tensorflow mxnet by 林塔恩](https://mikethreeacer.medium.com/ubuntu-18-04-%E5%AE%89%E8%A3%9D-cuda-cudnn-anaconda-pytorch-1f170b3326a4)
+
+docker 想架設有 GPU 的環境相對繁雜許多，請先上網查詢並確認安裝完畢後，確認 `nvidia-docker` 指令是否能使用，若能使用，即可按照以下方式架設 API Server：
+```
+sudo nvidia-docker build . -t mathlin/cudaoutofmemory
+sudo nvidia-docker run --gpus='"device=0,1"' -p 614:614 -d mathlin/cudaoutofmemory
+```
+
+同樣地，上述 images 命名可自行更換。格外要注意的是 gpu 設備編號請看自己電腦對應的編號更改之。而若建置上需要排查，請參考上方 **[不使用 GPU]** 篇，只需將指令 `docker` 改為 `nvidia-docker` 就可使用。
+
+### (3) 小測試
+本隊測試時有使用三種工具：
+- JMeter - 壓力測試
+- Postman - API 基本測試
+- grequests - 異步處理測試
+
+前兩者是非常重要與好用的測試方式，網路上有相當詳細的教學步驟，可自行查閱。而這邊想簡單介紹 grequests 如何簡單測試 API Server 異步處理之耗時。
+
+首先，`testing/example_concurrentTesting.py` 是範例程式檔，可編輯該檔案的 URL 為你的 API Server 位置，接著：
+```
+time python3 -m testing/example_concurrentTesting.py
+```
+
+即可看到在同時發送十筆 requests 時，API Server 回傳總耗時為何。而你可從 User, System 以及 total 彼此間的花費時間關係看出系統是 I/O bound，還是 CPU bound。
+
+若要做其他的測試，可參考這份 python 檔更改，或著也可搜尋到更多 grequests 的使用方式。
+
+
+## （八）未來展望
+本隊 CUDAOutOfMemory 在正式賽期間第三天，主機於早上發生意外，因而在第三、第四天無法正常提供服務，因此未來有機會的話，希望能盡量將 API 服務「雲端化」，以避免意外狀況，不需用到那麼多較高的後端技術成本，就可以得到遠遠勝出的效能。
+
+然倘若考量成本，以及那些意外大多可避免的話，未來選擇自行架設主機有以下項目是未來能夠發展與改進的方向。
+
+
+### 效能提升
+- **[nvidia-docker]**\
+ 根據網路上文章指出，nvidia-docker 在運行過程中會不斷查詢網路上特定文件，以至於效率拖沓，因此若能 code tracing 抓出執行一系列步驟，將那些文件進到 local 端維護並定期更新，能提高約 30% 之效能。
+- **[multi-GPUs]**\
+ Transformer 模型要以 multi-Worker 形式執行有一定的困難。而當時發現能以 parallel data pipeline 的方式，拆分 transformer encoder, decoder 等步驟，並於不同 GPU 間同步分開執行。但此法是最困難與麻煩的，可考慮未來嘗試之。
+- **[Redis]**\
+ 若服務有超時狀況發生，將會浪費先前的運算時間。因此可利用 Redis 將計算到一半的結果對應於 pid (任務代號)，遇到相同任務代號持續計算，以節省不必要之浪費、提高效率。此外，[service-streamer](https://github.com/ShannonAI/service-streamer) 亦有針對 Redis 的 batch 加速技術。
+
+ 
+### 程式碼維護
+- **[Config]**\
+ 在本專案中，大多資料夾皆配置有 `Config.py`，然而當時因 `api.py` 與各模型推論資料夾設定相互衝突，故並未設定 api 的 config，未來可處理這部分，能有效屏蔽敏感內容、消弭雜亂的程式碼片段，並提高可維護性。
+- **[ArgumentParser]**\
+ 目前 ArgumentParser 參數寫的不夠完全，常常使用時仍有些麻煩，這點需要改進。
+- **[Coding style]**\
+ 現今本專案遵循 PEP8 形式，然而在類別命名等方面尚無一致性標準，也並沒有善用 class 的結構寫出 "clean code"。較多程式碼片段顯得拖沓稍不嚴謹些，未來可在這方面持續努力。
+- **[Git]**\
+ 專案因使用實驗室主機進行，而在 AI model 方面以 jupyter 較為方便。不過這也導致了 負責 model 的人員與 API Server 的人員難以一致性的使用 git 控管之。而若可以改善這問題，並按功能繳交 commit，遵循一般的 git flow，整體維護上會更為簡單明瞭。
+ 
+### 穩定提供服務
+- **[Celery]**\
+  Celery 是 Python 工作排程的套件，搭配此可以更有效管理 request 的「進出型態」，此外能強迫逾時的 request 不再計算，先將結果儲存至 redis。也能避免過於異常的 request 把整個 API 伺服器搞爛的狀況，但因相對麻煩，在競賽中並未使用。
+- **[Exception]**\
+  配合上述 Celery 套件，我們在正式賽時例外處理並不夠周全，只是因為效能改善比預期要好太多，對於競賽需求綽綽有餘，才沒有遇到狀況。在異常資料或壅塞狀況時的例外處理之完善顯得是未來必須要改善的項目。
+- **[Nginx]**\
+  正式賽有試過 Nginx, WSGI 等正式部署 API 的工具，雖在例外處理上格外優秀，例如：JMeter 測試戛然停止時，末段的 request 並不會跳錯誤。但實際評測過三者 (包含 flask Thread) 之效能後，發現 flask thread 效能高出不少，才因而使用。未來可研究「正式」部署 API 服務的工具，提高穩定性，也需要找出如何提高正式部署工具的效能。
+- **[Request]**\
+ 目前是針對每筆 request 都開 Thread，但遇到 **過多** 的狀況是很容易出事的，因此配合上述 Nginx 正式部署工具之機制，可改為架設 5~10 台 虛擬的伺服器 server，並作 balance，才能穩定提供服務。
