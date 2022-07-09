@@ -2,14 +2,14 @@
 
 
 ## （一）簡介
-本專案參加玉山銀行舉辦之「看見你的聲音—語音辨識後修正」競賽，隊名為 **CUDAOutOfMemory**，共有兩名成員：林育辰、梁俊彥，前者負責 API 伺服器、後者則主要負責 AI model。本文件為「**最佳 API 服務獎**」之說明文件。
+本文件為「**最佳 API 服務獎**」之說明文件，參加玉山銀行舉辦之「看見你的聲音—語音辨識後修正」競賽，由林育辰、梁俊彥組成的 **CUDAOutOfMemory**，前者負責 API Server、後者則主要負責 AI model。
 
 API Server 以 [JMeter](https://jmeter.apache.org/index.html) 作為壓力測試工具評測，在以下條件下進行：
-- 同時有 10 個 clients
+- 同時有 **10** 個 clients
 - 每個 clients 皆輪流發送 10 個不同的 request
 - 每個 clients 收到 response 後才傳送下個 request
 
-最終在上述條件，以 Trasformer 模型達到 **14.5 / sec (Throughput)** 的水準，大多數的 Request 能在 1 秒內回傳推論結果。
+最終在上述條件，以 Trasformer 模型達到 **14.5 / sec (Throughput)** 的水準，大多數的 Request 能在 **1** 秒內回傳推論結果。
 
 ### 附註：機器規格
 本隊曾考慮過 GCP, AWS 等雲端服務平台，然因費用及其他因素，決定均使用校內 **國立臺灣大學 多媒體資訊檢索實驗室** 的主機設備：
@@ -20,7 +20,7 @@ API Server 以 [JMeter](https://jmeter.apache.org/index.html) 作為壓力測試
 |RAM| 128 GB||
 |OS| Ubuntu 21.04  (Hirsute Hippo)||
 
-本文件之所有結果與成效，均在使用 GPU (GeForce GTX 1080 Ti) 情況下達成。
+本文件之所有結果與成效，**均**在使用 GPU (GeForce GTX 1080 Ti) 情況下達成。
 
 ## （二）緣起
 起初，我們著重於「**模型精準性**」上，並決定以重量級模型 Transformer 實行，並不斷優化模型的精確度，這也使得推論時間越拉越長，僅作一次 inference 就需高達 2300 ms 的時間，也因此開始不斷精進與研究提高 API 服務效能的方法。
@@ -29,21 +29,25 @@ API Server 以 [JMeter](https://jmeter.apache.org/index.html) 作為壓力測試
 ## （三）問題解決與目標
 ### 解決之道之一
 每筆高達 2300 ms 的推論時間，起初思考：
+
 - TOP10 中，真的有必要每個都兼顧嗎？
 - model level 是否應提升，亦可避免 overfitting？
-經過反覆嘗試，前三語句修正、前二語句修正, ...，甚至使用 RNN 模型輔助，但其成效都遜於 baseline。最後只針對 TOP1 糾錯才是結果最佳的，除此以外也將 level 調降，使得每筆 inference 降低到 700 ms。
+
+經過反覆嘗試，前三語句修正、前二語句修正, ...，甚至使用 RNN 模型輔助，但其成效都遜於 baseline。最後**只針對 TOP1 糾錯**才是結果最佳的，除此以外也將 **level 調降**，使得每筆 inference 降低到 700 ms。
 
 ### 解決之道之二
-然而，仔細觀覽賽事要求：
-- 最多需同時處理 10 筆 requests
-- 每筆 request 需於 1 秒內回傳 (注：後續修改為 2 秒)
+> 注：後續主辦方更改為 **2** 秒時限
 
-隨著同時處理的 request 增加，所需時間也會線性、甚至指數成長。一旦超時，該筆 request 還會再度回傳兩次，容易連鎖使得整體服務壅塞而全盤崩壞。
+然而，仔細觀覽賽事要求：
+- 最多需**同時**處理 10 筆 requests
+- 每筆 request 需於 1 秒內回傳
+
+隨著同時處理的 request 增加，所需時間也會**線性**、甚至指數成長。一旦超時，該筆 request 還會再度回傳兩次，容易產生連鎖反應，使得整體服務壅塞而全盤崩壞。
 
 因此，接著我有幾個目標想完成：
-- Concurrent, API 服務需能異步處理
-- non-timeout, 無法處理的就隨它去吧！
-- GPU speed up
+- **Concurrent**, API 服務需能異步處理
+- **non-timeout**, 無法處理的就隨它去吧！
+- **GPU** speed up
 
 #### Concurrent
 考慮 WSGI, Nginx 等正式環境部署工具，然實測結果比 flask 內建的 Thread 還慢 30% 左右，因此最後以 flask 內建之 Thread 達到 concurrent。
@@ -51,28 +55,30 @@ API Server 以 [JMeter](https://jmeter.apache.org/index.html) 作為壓力測試
 #### non-timeout
 timeout 對於本次競賽損傷是最嚴重的，直接沒有分數。因此對於無法計算、超出本 API 服務能力所及的，直接回傳 TOP1 獲得 baseline 是最實際的。
 
-承襲 concurrent 提到的，flask thread 應用於正式環境部署，對於例外處理較弱，應替接受資料先行篩選，例如：(1) 編碼總長度超過 45 者不予計算，直接給 TOP1，反之則經過 inference 推算。 (2) retry 過的語句就直接不予糾正，避免陷入惡性循環。
+承襲 concurrent 提到的，flask thread 應用於正式環境部署，對於例外處理較弱，應替接受資料先行篩選，例如：
+1. 編碼總長度超過 **45** 者不予計算，直接給 TOP1，反之則經過 inference 推算。
+2. retry 的語句就直接**不**予糾正，避免陷入惡性循環。
 
-原因是 transformer 是字與字間的推算，字的長度也影響著推論速度，一旦遭惡意傳送很長的字串，將會導致服務停滯。
+原因為 transformer 是**字與字間**的推算，**字的長度也影響著推論速度**，一旦遭惡意傳送很長的字串，將會導致服務停滯。
 
 
 #### GPU Speed up
-善用實驗室主機的 GPU，然而使用 docker 要跑 GPU 的話有很多繁瑣的前置作業，因此使用 nvidia-docker 架設服務最為實際。
+善用實驗室主機的 GPU，然而使用 docker 要跑 GPU 的話有很多繁瑣的前置作業，因此使用 **nvidia-docker** 架設服務最為實際。
 
 
-概括而論，引用 GPU 為我們提高 40% 的效能 (800 ms --> 480 ms)，non-timeout 選擇性糾正使我們得以控制能夠在 主機能力所及範圍內**提供滿足競賽需求之服務**。Concurrent 使我們能同時承受十個 request 傳送之。
+概括而論，引用 GPU 為我們提高 **40%** 的效能 (800 ms --> 480 ms)，non-timeout 選擇性糾正使我們得以控制能夠在 主機能力所及範圍內**提供滿足競賽需求之服務**。Concurrent 使我們能同時承受十個 request 傳送之。
 
-然而，這樣糾正編碼總長度為 25 的語句已是極限，如下圖：
+然而，這樣糾正編碼總長度為 25 的語句已是極限，如下圖即為長度 25 以下才糾正的 JMeter 壓力測試結果：
 ![](https://i.imgur.com/x4OPJZl.png)
 
-可以注意到部分的 request 甚至超過 2 秒的限制，因此這樣的效能對於我們而言尚且不足，故有了下個目標：Batch 技術的引入。
+可以注意到部分的 request 甚至**超過 2 秒**的限制，因此這樣的效能對於我們而言尚且不足，故有了下個目標：*Batch* 技術的引入。
 
 ### 解決之道之三 —— Batch 批次處理
-先提結論：本方法之導入，為我從 throughput 5.7 / sec 提升至 14.5 /sec，**效率為原本的 254 % 之多**。
+先提結論：本方法之導入，為我從 throughput 5.7 / sec 提升至 **14.5** / sec，**效率為原本的 254 % 之多**。
 
 我認為 API 在接收 request 時，可以給定一個 "延遲時間"，去累積 request，等時間一到 或 超過某一數量限制，就**批次處理**，如此還可利用 GPU 的平行處理的效能。
 
-因此，找到了 [ShannonAI/service-streamer](https://github.com/ShannonAI/service-streamer) 這套工具，能達到這個需求，實測後 Response time graph 如下：
+因此，找到了 **[ShannonAI/service-streamer](https://github.com/ShannonAI/service-streamer)** 這套工具，能達到這個需求，實測後 Response time graph 如下：
 ![](https://i.imgur.com/hLxn4eJ.png)
 
 可注意到多數 request 皆能在遠超乎主辦方之條件，於 1 秒內回傳結果，而下圖更可看出 throughput 穩定的程度：
@@ -92,24 +98,24 @@ timeout 對於本次競賽損傷是最嚴重的，直接沒有分數。因此對
 ### API Server 架構圖
 ![](https://i.imgur.com/KosszE5.png)
 1. **[POST]** \
-由主辦方傳送 Requests 至 Server
+由主辦方傳送 Requests 至 Server。
 2. **[Thread]** \
-Flask server 為每筆 request 建立一個 thread 處理之
+Flask server 為**每**筆 request 建立一個 thread 處理之。
 3. **[Queue]** \
- 延遲 150 ms 以收集 request，收集到 64 筆 或超出時間就批次處理
+ 延遲 **150 ms** 以收集 request，收集到 64 筆 或超出時間就批次處理。
 4. **[Batch & model]** \
-同時批次處理每個 request，每個 request 都檢查是否「有誤」，無誤後依序前處理、推論 (AI model)、檢查後得到結果
+同時批次處理每個 request，每個 request 都檢查是否「有誤」，確認後依序前處理、推論 (AI model)、檢查後得到結果。
 5. **[Return]** \
-計算出結果後，將結果給予對應的 Thread
+計算出結果後，將結果給予對應的 Thread。
 6. **[Response]** \
-由 Thread 回傳給對應的 Request
+由 Thread 回傳給對應的 Request。
 
 
-### 優勢
+### 優點
 本架構以 Docker 架置，並且輔以 batch 和例外處理等方式，目標是希望達到：
-1. **便於建置** —— 僅需安裝 Docker，即可輕鬆建置 API Server
+1. **便於建置** —— 僅需安裝 Docker，即可輕鬆建置 API Server。
 2. **回應速率一致** —— 批次處理技術，使得同時傳一個、兩個或多個 request 時，每筆 request 花費時間會接近。這能讓使用者不會有服務「忽快忽慢」不穩定的感覺。
-3. **例外處理** —— 避免過長或失敗的 request 使服務壅塞
+3. **例外處理** —— 避免過長或失敗的 request 使服務壅塞。
 
 
 ## （五）應用技術
@@ -120,7 +126,7 @@ API Server 啟動時**預**先載入 pre-trained model。
 - **[batch]** \
 批次處理，使得效率大幅提升，並使所有 request 回應時間接近。
 - **[例外處理]** \
-避免異常的 request 使服務壅塞而中斷。
+**避免**異常的 request 使服務壅塞而中斷。
 - **[concurrent]** \
 使用異步處理，使得其能平行化增進效能，避免 sequential 形式一來一往使效率低落。
 - **[cache]** \
@@ -147,11 +153,12 @@ docker 建置時運用 cache 機制，使得 **re-build** 時建置速度從 15 
 ## （七）手把手之使用教學
 ### (1) 打包
 
-1. 下載本專案，並且載入 submodule (其他開源專案程式碼)
+1. 下載本專案，並且載入 submodule (其他開源專案程式碼)，切換到 `api-spec` 分支。
 ```
 git clone git@github.com:yuchen0515/2022-Competition-CUDAOutOfMemory.git
 git submodule init
 git submodule update
+git checkout api-spec
 ```
 2. 下載模型檔案
 - `ngram_lm`: 下載[資料夾](https://drive.google.com/drive/folders/196FIAexcXiARKcU2NdkRAMpphOxDeajF?usp=sharing)後，放置專案主目錄
@@ -267,6 +274,7 @@ time python3 -m testing/example_concurrentTesting.py
 - **[Exception]**\
   配合上述 Celery 套件，我們在正式賽時例外處理並不夠周全，只是因為效能改善比預期要好太多，對於競賽需求綽綽有餘，才沒有遇到狀況。在異常資料或壅塞狀況時的例外處理之完善顯得是未來必須要改善的項目。
 - **[Nginx]**\
-  正式賽有試過 Nginx, WSGI 等正式部署 API 的工具，雖在例外處理上格外優秀，例如：JMeter 測試戛然停止時，末段的 request 並不會跳錯誤。但實際評測過三者 (包含 flask Thread) 之效能後，發現 flask thread 效能高出不少，才因而使用。未來可研究「正式」部署 API 服務的工具，提高穩定性，也需要找出如何提高正式部署工具的效能。
+  正式賽有試過 Nginx, WSGI 等正式部署 API 的工具，雖在例外處理上格外優秀，例如：JMeter 測試戛然停止時，末段的 request 並不會跳錯誤。\
+  但實際評測過三者 (包含 flask Thread) 之效能後，發現 flask thread 效能高出不少，為了效能才鋌而走險使用。未來可研究「正式」部署 API 服務的工具，提高穩定性，也需要找出如何提高正式部署工具的效能。
 - **[Request]**\
  目前是針對每筆 request 都開 Thread，但遇到 **過多** 的狀況是很容易出事的，因此配合上述 Nginx 正式部署工具之機制，可改為架設 5~10 台 虛擬的伺服器 server，並作 balance，才能穩定提供服務。
