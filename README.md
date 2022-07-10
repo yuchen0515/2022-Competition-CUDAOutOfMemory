@@ -156,6 +156,7 @@ docker 建置時運用 cache 機制，使得 **re-build** 時建置速度從 15 
 1. 下載本專案，並且載入 submodule (其他開源專案程式碼)，切換到 `api-spec` 分支。
 ```
 git clone git@github.com:yuchen0515/2022-Competition-CUDAOutOfMemory.git
+cd 2022-Competition-CUDAOutOfMemory
 git submodule init
 git submodule update
 git checkout api-spec
